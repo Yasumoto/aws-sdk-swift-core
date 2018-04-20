@@ -47,8 +47,6 @@ public struct AWSClient {
 
     let serviceProtocol: ServiceProtocol
 
-    private var cond = Cond()
-
     let serviceEndpoints: [String: String]
 
     let partitionEndpoint: String?
