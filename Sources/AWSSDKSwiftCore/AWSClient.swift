@@ -118,7 +118,20 @@ public struct AWSClient {
 extension AWSClient {
     fileprivate func invoke(request: Request) throws -> Response {
         // TODO implement Keep-alive
-        let client = HTTPClient(hostname: request.head.uri)
+        guard let url = URL(string: request.head.uri) else {
+            throw RequestError.invalidURL("\(request.head.uri)")
+        }
+        guard let scheme = url.scheme else {
+            throw RequestError.invalidURL("\(url)")
+        }
+        var port: Int {
+            let isSecure = scheme == "https" || scheme == "wss"
+            return isSecure ? 443 : Int(url.port ?? 80)
+        }
+        guard let hostname = url.host else {
+            throw RequestError.invalidURL("\(url)")
+        }
+        let client = HTTPClient(hostname: hostname, port: port)
         let future = try client.connect()
         let response = try future.wait()
         client.close { error in
