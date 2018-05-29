@@ -10,9 +10,9 @@ import Foundation
 
 extension Signers {
     public final class V4 {
-        
-        public var credentials: CredentialProvider
-        
+
+        public var credential: CredentialProvider
+
         public let region: Region
         
         public let service: String
@@ -39,9 +39,9 @@ extension Signers {
             }
             return sha256(data).hexdigest()
         }
-        
-        public init(credentials: CredentialProvider, region: Region, service: String) {
-            self.credentials = credentials
+
+        public init(credential: CredentialProvider, region: Region, service: String) {
+            self.credential = credential
             self.region = region
             self.service = service
         }
@@ -50,10 +50,11 @@ extension Signers {
             let datetime = V4.timestamp(date)
             let headers = ["Host": url.hostWithPort!]
             let bodyDigest = hexEncodedBodyHash(Data())
-            
+            let credentialForSignature = getCredential()
+
             var queries = [
                 URLQueryItem(name: "X-Amz-Algorithm", value: algorithm),
-                URLQueryItem(name: "X-Amz-Credential", value: credential(datetime).replacingOccurrences(of: "/", with: "%2F")),
+                URLQueryItem(name: "X-Amz-Credential", value: credentialForSignatureWithScope(credentialForSignature, datetime).replacingOccurrences(of: "/", with: "%2F")),
                 URLQueryItem(name: "X-Amz-Date", value: datetime),
                 URLQueryItem(name: "X-Amz-Expires", value: "\(expires)"),
                 URLQueryItem(name: "X-Amz-SignedHeaders", value: "host"),
@@ -67,8 +68,6 @@ extension Signers {
                     queries.append(URLQueryItem(name: q[0], value: nil))
                 }
             }
-            
-            
             queries = queries.sorted { a, b in a.name < b.name }
             
             let url = URL(string: url.absoluteString.components(separatedBy: "?")[0]+"?"+queries.asStringForURL)!
@@ -78,7 +77,8 @@ extension Signers {
                 headers: headers,
                 datetime: datetime,
                 method: "GET",
-                bodyDigest: bodyDigest
+                bodyDigest: bodyDigest,
+                credentialForSignature: credentialForSignature
             )
             
             return URL(string: url.absoluteString+"&X-Amz-Signature="+sig)!
@@ -87,7 +87,8 @@ extension Signers {
         public func signedHeaders(url: URL, headers: [String: String], method: String, date: Date = Date(), bodyData: Data) -> [String: String] {
             let datetime = V4.timestamp(date)
             let bodyDigest = hexEncodedBodyHash(bodyData)
-            
+            let credentialForSignature = getCredential()
+
             var headersForSign = [
                 "x-amz-content-sha256": hexEncodedBodyHash(bodyData),
                 "x-amz-date": datetime,
@@ -104,10 +105,11 @@ extension Signers {
                 headers: headersForSign,
                 datetime: datetime,
                 method: method,
-                bodyDigest: bodyDigest
+                bodyDigest: bodyDigest,
+                credentialForSignature: credentialForSignature
             )
-            
-            if let token = self.credentials.sessionToken {
+
+            if let token = credentialForSignature.sessionToken {
                 headersForSign["x-amz-security-token"] = token
             }
             
@@ -121,9 +123,20 @@ extension Signers {
             formatter.locale = Locale(identifier: "en_US_POSIX")
             return formatter.string(from: date)
         }
-        
-        func authorization(url: URL, headers: [String: String], datetime: String, method: String, bodyDigest: String) -> String {
-            let cred = credential(datetime)
+
+        func getCredential() -> CredentialProvider {
+            if credential.isEmpty() || credential.nearExpiration() {
+                do {
+                    self.credential = try MetaDataService.getCredential()
+                } catch {
+                    // should not be crash
+                }
+            }
+            return credential
+        }
+
+        func authorization(url: URL, headers: [String: String], datetime: String, method: String, bodyDigest: String, credentialForSignature: CredentialProvider) -> String {
+            let cred = credentialForSignatureWithScope(credentialForSignature, datetime)
             let shead = signedHeaders(headers)
             
             let sig = signature(
@@ -131,7 +144,8 @@ extension Signers {
                 headers: headers,
                 datetime: datetime,
                 method: method,
-                bodyDigest: bodyDigest
+                bodyDigest: bodyDigest,
+                credentialForSignature: credentialForSignature
             )
             
             return [
@@ -140,9 +154,9 @@ extension Signers {
                 "Signature=\(sig)",
             ].joined(separator: ", ")
         }
-        
-        func credential(_ datetime: String) -> String {
-            return "\(credentials.accessKeyId)/\(credentialScope(datetime))"
+
+        func credentialForSignatureWithScope(_ credentialForSignature: CredentialProvider, _ datetime: String) -> String {
+            return "\(credentialForSignature.accessKeyId)/\(credentialScope(datetime))"
         }
         
         func signedHeaders(_ headers: [String:String]) -> String {
@@ -164,10 +178,10 @@ extension Signers {
             }
             return list.joined(separator: "\n")
         }
-        
-        func signature(url: URL, headers: [String: String], datetime: String, method: String, bodyDigest: String) -> String {
-            let secretAccessKey = "AWS4\(self.credentials.secretAccessKey)"
-            
+
+        func signature(url: URL, headers: [String: String], datetime: String, method: String, bodyDigest: String, credentialForSignature: CredentialProvider) -> String {
+            let secretAccessKey = "AWS4\(credentialForSignature.secretAccessKey)"
+
             let secretBytes = Array(secretAccessKey.utf8)
             let date = hmac(
                 string: String(datetime.prefix(upTo: datetime.index(datetime.startIndex, offsetBy: 8))),
@@ -175,7 +189,6 @@ extension Signers {
             )
             let region = hmac(string: self.region.rawValue, key: date)
             let service = hmac(string: self.service, key: region)
-            let credentials = hmac(string: identifier, key: service)
             let string = stringToSign(
                 url: url,
                 headers: headers,
@@ -183,8 +196,8 @@ extension Signers {
                 method: method,
                 bodyDigest: bodyDigest
             )
-            
-            return hmac(string: string, key: credentials).hexdigest()
+
+            return hmac(string: string, key: hmac(string: identifier, key: service)).hexdigest()
         }
         
         func credentialScope(_ datetime: String) -> String {
@@ -245,11 +258,7 @@ extension Signers {
                     result.append(encodeSlash ? "%2F" : charStr)
                 } else {
                     result.append("%")
-<<<<<<< 66dbe8c1f8814a8b8775a86720ff5dd7328a51aa
-                    result.append(char.hexadecimal())
-=======
                     result.append(String(format:"%02X", char))
->>>>>>> zero pad single char hex
                 }
             }
             return result
