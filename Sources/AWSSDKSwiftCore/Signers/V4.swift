@@ -14,13 +14,13 @@ extension Signers {
         public var credential: CredentialProvider
 
         public let region: Region
-        
+
         public let service: String
-        
+
         let identifier = "aws4_request"
-        
+
         let algorithm = "AWS4-HMAC-SHA256"
-        
+
         var unsignableHeaders: [String] {
             return [
                 "authorization",
@@ -32,7 +32,7 @@ extension Signers {
                 "x-amzn-trace-id"
             ]
         }
-        
+
         func hexEncodedBodyHash(_ data: Data) -> String {
             if data.isEmpty && service == "s3" {
                 return "UNSIGNED-PAYLOAD"
@@ -45,7 +45,7 @@ extension Signers {
             self.region = region
             self.service = service
         }
-        
+
         public func signedURL(url: URL, date: Date = Date(), expires: Int = 86400) -> URL {
             let datetime = V4.timestamp(date)
             let headers = ["Host": url.hostWithPort!]
@@ -59,7 +59,7 @@ extension Signers {
                 URLQueryItem(name: "X-Amz-Expires", value: "\(expires)"),
                 URLQueryItem(name: "X-Amz-SignedHeaders", value: "host"),
             ]
-            
+
             url.query?.components(separatedBy: "&").forEach {
                 var q = $0.components(separatedBy: "=")
                 if q.count == 2 {
@@ -69,9 +69,9 @@ extension Signers {
                 }
             }
             queries = queries.sorted { a, b in a.name < b.name }
-            
+
             let url = URL(string: url.absoluteString.components(separatedBy: "?")[0]+"?"+queries.asStringForURL)!
-            
+
             let sig = signature(
                 url: url,
                 headers: headers,
@@ -80,10 +80,10 @@ extension Signers {
                 bodyDigest: bodyDigest,
                 credentialForSignature: credentialForSignature
             )
-            
+
             return URL(string: url.absoluteString+"&X-Amz-Signature="+sig)!
         }
-        
+
         public func signedHeaders(url: URL, headers: [String: String], method: String, date: Date = Date(), bodyData: Data) -> [String: String] {
             let datetime = V4.timestamp(date)
             let bodyDigest = hexEncodedBodyHash(bodyData)
@@ -94,12 +94,12 @@ extension Signers {
                 "x-amz-date": datetime,
                 "Host": url.hostWithPort!,
             ]
-            
+
             for header in headers {
                 if unsignableHeaders.contains(header.key.lowercased()) { continue }
                 headersForSign[header.key] = header.value
             }
-            
+
             headersForSign["Authorization"] = authorization(
                 url: url,
                 headers: headersForSign,
@@ -112,10 +112,10 @@ extension Signers {
             if let token = credentialForSignature.sessionToken {
                 headersForSign["x-amz-security-token"] = token
             }
-            
+
             return headersForSign
         }
-        
+
         static func timestamp(_ date: Date) -> String {
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
@@ -138,7 +138,7 @@ extension Signers {
         func authorization(url: URL, headers: [String: String], datetime: String, method: String, bodyDigest: String, credentialForSignature: CredentialProvider) -> String {
             let cred = credentialForSignatureWithScope(credentialForSignature, datetime)
             let shead = signedHeaders(headers)
-            
+
             let sig = signature(
                 url: url,
                 headers: headers,
@@ -147,7 +147,7 @@ extension Signers {
                 bodyDigest: bodyDigest,
                 credentialForSignature: credentialForSignature
             )
-            
+
             return [
                 "AWS4-HMAC-SHA256 Credential=\(cred)",
                 "SignedHeaders=\(shead)",
@@ -158,7 +158,7 @@ extension Signers {
         func credentialForSignatureWithScope(_ credentialForSignature: CredentialProvider, _ datetime: String) -> String {
             return "\(credentialForSignature.accessKeyId)/\(credentialScope(datetime))"
         }
-        
+
         func signedHeaders(_ headers: [String:String]) -> String {
             var list = Array(headers.keys).map { $0.lowercased() }.sorted()
             if let index = list.index(of: "authorization") {
@@ -166,11 +166,11 @@ extension Signers {
             }
             return list.joined(separator: ";")
         }
-        
+
         func canonicalHeaders(_ headers: [String: String]) -> String {
             var list = [String]()
             let keys = Array(headers.keys).sorted()
-            
+
             for key in keys {
                 if key.caseInsensitiveCompare("authorization") != ComparisonResult.orderedSame {
                     list.append("\(key.lowercased()):\(headers[key]!)")
@@ -199,7 +199,7 @@ extension Signers {
 
             return hmac(string: string, key: hmac(string: identifier, key: service)).hexdigest()
         }
-        
+
         func credentialScope(_ datetime: String) -> String {
             return [
                 String(datetime.prefix(upTo: datetime.index(datetime.startIndex, offsetBy: 8))),
@@ -208,7 +208,7 @@ extension Signers {
                 identifier
             ].joined(separator: "/")
         }
-        
+
         func stringToSign(url: URL, headers: [String: String], datetime: String, method: String, bodyDigest: String) -> String {
             let canonicalRequestString = canonicalRequest(
                 url: URLComponents(url: url, resolvingAgainstBaseURL: true)!,
@@ -216,9 +216,9 @@ extension Signers {
                 method: method,
                 bodyDigest: bodyDigest
             )
-            
+
             var canonicalRequestBytes = Array(canonicalRequestString.utf8)
-            
+
             return [
                 "AWS4-HMAC-SHA256",
                 datetime,
@@ -226,7 +226,7 @@ extension Signers {
                 sha256(&canonicalRequestBytes).hexdigest(),
             ].joined(separator: "\n")
         }
-        
+
         func canonicalRequest(url: URLComponents, headers: [String: String], method: String, bodyDigest: String) -> String {
             return [
                 method,
@@ -237,8 +237,8 @@ extension Signers {
                 bodyDigest
             ].joined(separator: "\n")
         }
-        
-        private static let awsUriAllowed: Characters = [
+
+        private static let awsUriAllowed: [String] = [
             "_", "-", "~", ".",
             "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
             "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
