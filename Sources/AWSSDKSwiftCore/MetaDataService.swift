@@ -76,7 +76,7 @@ struct MetaDataService {
         let head = HTTPRequestHead(
                      version: HTTPVersion(major: 1, minor: 1),
                      method: .GET,
-                     uri: url.path
+                     uri: url.absoluteString
                    )
         let request = Request(head: head, body: Data())
         let future = try client.connect(request)
