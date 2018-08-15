@@ -112,7 +112,6 @@ class SerializersTests: XCTestCase {
         XCTAssertEqual(swmSecondFromJson["memberKey2"], "memberValue2")
     }
 
-<<<<<<< 25626f35b1acaa8a7e8815242e6c4cca54c9e9e5
     func testLowercasedBoolean() {
         let node = try! XML2Parser(data: "<A>True</A>".data).parse()
         let str = XMLNodeSerializer(node: node).serializeToJSON()
@@ -123,8 +122,6 @@ class SerializersTests: XCTestCase {
         XCTAssertEqual(outputDict.count, 1)
     }
 
-=======
->>>>>>> fix broken tests
     func testSerializeToFlatDictionary() {
         let data = try! JSONEncoder().encode(A())
         let dict = try! JSONSerializer().serializeToFlatDictionary(data)
