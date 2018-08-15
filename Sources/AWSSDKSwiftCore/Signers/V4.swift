@@ -16,11 +16,11 @@ extension Signers {
         public let region: Region
 
         public let service: String
-        
+
         let identifier = "aws4_request"
-        
+
         let algorithm = "AWS4-HMAC-SHA256"
-        
+
         var unsignableHeaders: [String] {
             return [
                 "authorization",
@@ -32,7 +32,7 @@ extension Signers {
                 "x-amzn-trace-id"
             ]
         }
-        
+
         func hexEncodedBodyHash(_ data: Data) -> String {
             if data.isEmpty && service == "s3" {
                 return "UNSIGNED-PAYLOAD"
@@ -45,7 +45,7 @@ extension Signers {
             self.region = region
             self.service = service
         }
-        
+
         public func signedURL(url: URL, date: Date = Date(), expires: Int = 86400) -> URL {
             let datetime = V4.timestamp(date)
             let headers = ["Host": url.hostWithPort!]
@@ -59,7 +59,7 @@ extension Signers {
                 URLQueryItem(name: "X-Amz-Expires", value: "\(expires)"),
                 URLQueryItem(name: "X-Amz-SignedHeaders", value: "host"),
             ]
-            
+
             url.query?.components(separatedBy: "&").forEach {
                 var q = $0.components(separatedBy: "=")
                 if q.count == 2 {
@@ -72,7 +72,7 @@ extension Signers {
             queries = queries.sorted { a, b in a.name < b.name }
 
             let url = URL(string: url.absoluteString.components(separatedBy: "?")[0]+"?"+queries.asStringForURL)!
-            
+
             let sig = signature(
                 url: url,
                 headers: headers,
@@ -84,7 +84,7 @@ extension Signers {
 
             return URL(string: url.absoluteString+"&X-Amz-Signature="+sig)!
         }
-        
+
         public func signedHeaders(url: URL, headers: [String: String], method: String, date: Date = Date(), bodyData: Data) -> [String: String] {
             let datetime = V4.timestamp(date)
             let bodyDigest = hexEncodedBodyHash(bodyData)
@@ -95,12 +95,12 @@ extension Signers {
                 "x-amz-date": datetime,
                 "Host": url.hostWithPort!,
             ]
-            
+
             for header in headers {
                 if unsignableHeaders.contains(header.key.lowercased()) { continue }
                 headersForSign[header.key] = header.value
             }
-            
+
             headersForSign["Authorization"] = authorization(
                 url: url,
                 headers: headersForSign,
@@ -116,7 +116,7 @@ extension Signers {
 
             return headersForSign
         }
-        
+
         static func timestamp(_ date: Date) -> String {
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
@@ -167,11 +167,11 @@ extension Signers {
             }
             return list.joined(separator: ";")
         }
-        
+
         func canonicalHeaders(_ headers: [String: String]) -> String {
             var list = [String]()
             let keys = Array(headers.keys).sorted()
-            
+
             for key in keys {
                 if key.caseInsensitiveCompare("authorization") != ComparisonResult.orderedSame {
                     list.append("\(key.lowercased()):\(headers[key]!)")
@@ -209,7 +209,7 @@ extension Signers {
                 identifier
             ].joined(separator: "/")
         }
-        
+
         func stringToSign(url: URL, headers: [String: String], datetime: String, method: String, bodyDigest: String) -> String {
             let canonicalRequestString = canonicalRequest(
                 url: URLComponents(url: url, resolvingAgainstBaseURL: true)!,
@@ -217,9 +217,9 @@ extension Signers {
                 method: method,
                 bodyDigest: bodyDigest
             )
-            
+
             var canonicalRequestBytes = Array(canonicalRequestString.utf8)
-            
+
             return [
                 "AWS4-HMAC-SHA256",
                 datetime,
@@ -227,7 +227,7 @@ extension Signers {
                 sha256(&canonicalRequestBytes).hexdigest(),
             ].joined(separator: "\n")
         }
-        
+
         func canonicalRequest(url: URLComponents, headers: [String: String], method: String, bodyDigest: String) -> String {
             return [
                 method,
@@ -259,11 +259,7 @@ extension Signers {
                     result.append(encodeSlash ? "%2F" : charStr)
                 } else {
                     result.append("%")
-<<<<<<< 297aa410430baa6dc32eb4bb963555daca35b303
-                    result.append(char.hexadecimal())
-=======
                     result.append(String(format:"%02X", char))
->>>>>>> zero pad single char hex
                 }
             }
             return result
